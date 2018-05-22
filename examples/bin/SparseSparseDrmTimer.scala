@@ -1,0 +1,30 @@
+import org.apache.spark.ml.linalg.distributed.CoordinateMatrix
+import org.apache.spark.mllib.linalg.distributed.MatrixEntry
+import org.apache.spark.sql.functions.rand
+import org.apache.spark.sql.{Dataset, SparkSession}
+
+
+def timeSparseDRMMMul(m: Int, n: Int, s: Int, para: Int, pctDense: Double = .20, seed: Long = 1234L): Long = {
+
+  val session = SparkSession.builder().getOrCreate()
+  def makeMatrixDF(rowCount: Int, colCount: Int): Dataset[MatrixEntry] = {
+    import session.implicits._
+
+    val rows = session.sqlContext.range(0, rowCount.toLong)
+    val cols = session.sqlContext.range(0, colCount.toLong)
+
+    rows
+      .crossJoin(cols)
+      .withColumn("rand", rand(seed))
+      .map(row => MatrixEntry(row.getLong(0), row.getLong(1), row.getDouble(2)))
+  }
+
+  val left = new CoordinateMatrix(makeMatrixDF(m,n))
+  val right = new CoordinateMatrix(makeMatrixDF(n,s))
+
+  val start = System.currentTimeMillis()
+  val product = left.multiply(right)
+  println(product.entries.collect)
+  val end = System.currentTimeMillis()
+  end-start
+}
