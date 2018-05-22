@@ -39,19 +39,18 @@ $ spark-shell MASTER=local[2] --jars="target/linalg-1.0-SNAPSHOT.jar"
 
 At the scala> prompt, enter: 
 ```   
-scala> :load ../msft-linalg/examples
-                               /bin/SparseSparseDrmTimer.scala
+scala> :load examples/bin/SparseSparseDrmTimer.scala
 ```
 Which will load a matrix multiplication timer function definition. To run the matrix timer: 
 ```
-        scala> timeSparseDRMMMul(1000,1000,1000,1,.02,1234L)
-            {...} res3: Long = 16321
+scala> timeSparseDRMMMul(1000,1000,1000,1,.02,1234L)
+    {...} res3: Long = 16321
 ```
 
 #### Troubleshooting
 
 If you run into the following error, you may have set the sample ratio to small compared to the size of your matrices. 
-Try increasing sample ratio. 
+Try increasing the sample ratio. 
 ```
 java.lang.UnsupportedOperationException: empty collection
 ```
