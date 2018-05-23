@@ -207,7 +207,7 @@ class CoordinateMatrix(val entries: Dataset[MatrixEntry],
 
       val jbdv = new BDV[Double](V.sparse(sparseVectorLength, jVecSeq).toArray)
 
-      (jbdv.asDenseMatrix * ibsv.asCscRow).data(0)
+      (jbdv.asDenseMatrix * ibsv).data(0)
     })
 
     val rightMatrixVectors = rightMatrix.vectorizeCols("j", "jVec")

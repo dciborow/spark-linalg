@@ -1,7 +1,8 @@
+
 import org.apache.spark.ml.linalg.distributed.CoordinateMatrix
 import org.apache.spark.mllib.linalg.distributed.MatrixEntry
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions.rand
-import org.apache.spark.sql.{Dataset, SparkSession}
 
 
 def timeSparseDRMMMul(m: Int, n: Int, s: Int, para: Int, pctDense: Double = .20, seed: Long = 1234L): Long = {

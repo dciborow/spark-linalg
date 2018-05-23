@@ -25,7 +25,7 @@ git clone https://github.com/dciborow/spark-linalg.git
 ###### Building Project with Apache Maven
 From the  project directory we may issue the command to build using the mvn profile.
 
-JVM only:
+JVM build:
 ```
 mvn clean install -DskipTests
 ```
