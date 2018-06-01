@@ -1,4 +1,13 @@
 
+## Background
+The current matrix multiplication implementation in Spark runs into scaling issues. The matrix multiplcaiton plan becomes unrunable when the number of columns in the first matrix exceeds 40,000. This new appraoch is designed to overcome that issue, and to provide a more scalable implmentation of matrix multiplication that can complete when matrix sizes exceed millions of columns and rows. A script is included, SparseSparseRDDTimer, that can be used to easily reproduce the observed issues with the current matrix multiplication implementation.  
+
+
+## Benchmarks
+Benchmark results can be found in Benchmarks.xlsx, and the code to generate the benchmark results is included in Benchmarks.scala. The benchmarks where run on Azure Databricks and the cluster configurations can be found in each tab. For larger benchmarks, it is recommended to first generate and save the dataset, and to also write the dataset to disc. This is to avoid collecting the results onto the driver, while forcing Spark's lazy execution. Sample code for this is included in DataGeneration.scala.   
+
+## Setup
+
 ###### Downloads
 First, ensure that both Java 1.8 and Maven are installed. Newer versions of Java may cause build issues.
 
@@ -47,7 +56,11 @@ scala> timeSparseDRMMMul(1000,1000,1000,1,.02,1234L)
     {...} res3: Long = 16321
 ```
 
-#### Troubleshooting
+## Azure Databricks - Setup
+
+
+
+## Troubleshooting
 
 If you run into the following error, you may have set the sample ratio to small compared to the size of your matrices. 
 Try increasing the sample ratio. 

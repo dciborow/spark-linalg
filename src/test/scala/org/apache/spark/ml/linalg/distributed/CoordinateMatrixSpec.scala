@@ -23,14 +23,14 @@ class CoordinateMatrixSpec extends FunSuite {
     * ...one rectangular, and one square matrix
     */
   test("Mat Mul test") {
-    def testMatrixMultiplication(row: Int, col: Int): Unit = {
+    def testMatrixMultiplication(row: Int, col: Int, pctDense: Double): Unit = {
       implicit def dsToSM(ds: Dataset[MatrixEntry]): CoordinateMatrix = new CoordinateMatrix(ds)
 
-      val xds = makeMatrixDF(row, col)
+      val xds = makeMatrixDF(row, col, pctDense)
       assert(xds.numRows() == row)
       assert(xds.numCols() == col)
 
-      val yds = makeMatrixDF(col, col)
+      val yds = makeMatrixDF(col, col, pctDense)
       assert(yds.numCols() == col)
       assert(yds.numRows() == col)
 
@@ -40,13 +40,16 @@ class CoordinateMatrixSpec extends FunSuite {
 
       val rddProduct = xds.toMLLibBlockMatrix multiply yds.toMLLibBlockMatrix
       assert(product.toMLLibLocalMatrix == rddProduct.toLocalMatrix().asML)
+      println(product.entries.collect)
       //      assert(product.toBlockMatrix().toLocalMatrix() == rddProduct.toLocalMatrix())
       ()
     }
-    testMatrixMultiplication(3, 3)
+    testMatrixMultiplication(3, 3, 1)
+    testMatrixMultiplication(30, 30, .9)
+    testMatrixMultiplication(1000, 1000, .1)
   }
 
-  def makeMatrixDF(rowCount: Int, colCount: Int): Dataset[MatrixEntry] = {
+  def makeMatrixDF(rowCount: Int, colCount: Int, pctDense: Double = 0.2): Dataset[MatrixEntry] = {
     import session.implicits._
 
     val rows = session.sqlContext.range(0, rowCount.toLong)
@@ -57,5 +60,6 @@ class CoordinateMatrixSpec extends FunSuite {
       .crossJoin(cols)
       .withColumn("rand", rand(5))
       .map(row => MatrixEntry(row.getLong(0), row.getLong(1), row.getDouble(2)))
+      .sample(false, pctDense)
   }
 }

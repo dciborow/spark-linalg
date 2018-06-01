@@ -47,18 +47,6 @@ class CoordinateMatrix(val entries: Dataset[MatrixEntry],
                        private var nRows: Long,
                        private var nCols: Long) extends DistributedMatrix with MLLib {
 
-  private[ml] def toBreeze(): BDM[Double] = {
-    val m = numRows().toInt
-    val n = numCols().toInt
-    val mat = BDM.zeros[Double](m, n)
-    entries.collect().foreach { case MatrixEntry(i, j, value) =>
-      mat(i.toInt, j.toInt) = value
-    }
-    mat
-  }
-
-  //  def multiply(other: IndexedRowMatrix): DistributedMatrix = multiply(other.toCoordinateMatrix)
-
   /** Alternative constructor leaving matrix dimensions to be determined automatically. */
   def this(entries: Dataset[MatrixEntry]) = this(entries, 0L, 0L)
 
@@ -119,7 +107,7 @@ class CoordinateMatrix(val entries: Dataset[MatrixEntry],
     * @param other left matrix for multiplication, in SparseMatrix type
     * @return Product of A * B
     */
-  def multiply(other: CoordinateMatrix): CoordinateMatrix = multiply2(this, other)
+  def multiply(other: CoordinateMatrix): CoordinateMatrix = multiply(this, other)
 
   /**
     * Multiply two sparse matrices together
@@ -128,60 +116,7 @@ class CoordinateMatrix(val entries: Dataset[MatrixEntry],
     * @return Product of A * B
     */
   def multiply(other: Dataset[MatrixEntry]): CoordinateMatrix = {
-    multiply2(new CoordinateMatrix(entries), new CoordinateMatrix(other))
-  }
-
-  case class VectorPair(i: Int, iVec: mutable.WrappedArray[(Int, Double)], j: Int, jVec: mutable.WrappedArray[(Int,
-    Double)])
-
-  def test: Unit = {
-    val spark = SparkSession.builder().getOrCreate()
-    // With some step, square matrices and multiple runs
-    val minDim = 1000
-    val maxDim = 5000
-    val step = 1000
-    val repetitions = 5
-    val range = for (b <- minDim to maxDim by step) yield b
-    //val range = for (b  <- 6 to 14) yield { math.pow(2, b).toInt}
-    import spark.implicits._
-
-    for (i <- 0 until range.length) {
-      var result = new Array[Double](repetitions)
-      val dim = range(i)
-      for (j <- 0 until repetitions) {
-        //        val a = breeze.linalg.DenseMatrix.rand[Double](dim, dim)//.mapValues(_.toFloat);
-        //        val b = breeze.linalg.DenseMatrix.rand[Double](dim, dim)//.mapValues(_.toFloat);
-        //        val aMat = Matrices.dense(a.rows, a.cols, a.toArray)
-        //        val bMat = Matrices.dense(b.rows, b.cols, b.toArray)
-        val df = spark.sparkContext.parallelize(List.range(1, 10000)).toDF().select("value")
-        System.gc();
-        val t = System.nanoTime();
-        val product = df.rdd.mapPartitions(rows => {
-          rows.map(row => {
-            val a = breeze.linalg.DenseMatrix.rand[Double](dim, dim)//.mapValues(_.toFloat);
-            val b = breeze.linalg.DenseMatrix.rand[Double](dim, dim)//.mapValues(_.toFloat);
-            a.toDenseVector*b.toDenseVector
-          })
-        })
-        println(product.collect)
-
-        //        val product = ds.mapPartitions(rows => {
-        //          rows.map( (row) => {
-        //            val mat1 = new breeze.linalg.DenseMatrix[Double](row._1.numRows, row._1.numCols, row._1.toArray)
-        //            val mat2 = new breeze.linalg.DenseMatrix[Double](row._2.numRows, row._2.numCols, row._2.toArray)
-        //            mat1 * mat2
-        //          })
-        //        })
-        val totalTime = System.nanoTime() - t;
-        result(j) = totalTime;
-      }
-      val someValue = result.last
-      scala.util.Sorting.quickSort(result)
-      val median = (result(repetitions / 2) + result(repetitions / 2 - 1)) / 2
-      val avg = result.sum / result.length
-      val gigaFlops = 2.0 / median * dim * dim * dim
-      println(dim + "\t" + median / 1e9 + "\t" + avg / 1e9 + "\t" + someValue / 1e9 + "\t" + gigaFlops)
-    }
+    multiply(new CoordinateMatrix(entries), new CoordinateMatrix(other))
   }
 
   /**
@@ -191,60 +126,34 @@ class CoordinateMatrix(val entries: Dataset[MatrixEntry],
     * @param rightMatrix the left matrxi in the multiplication
     * @return
     */
-  private[linalg] def multiply2(leftMatrix: CoordinateMatrix, rightMatrix: CoordinateMatrix)
-  : CoordinateMatrix = {
-
+  private[linalg] def multiply(leftMatrix: CoordinateMatrix, rightMatrix: CoordinateMatrix): CoordinateMatrix = {
     import leftMatrix.entries.sparkSession.implicits._
 
+    val (i, j) = ("i", "j")
+    val (iVec, jVec) = (i + "Vec", j + "Vec")
     val sparseVectorLength = leftMatrix.numCols().toInt
 
     val dot = udf((iVec: mutable.WrappedArray[Row], jVec: mutable.WrappedArray[Row]) => {
-      val iVecSeq = iVec.map(r => (r.getInt(0), r.getDouble(1)))
-      val iMLSparse = V.sparse(sparseVectorLength, iVecSeq).toSparse
-      val ibsv = new BSV[Double](iMLSparse.indices, iMLSparse.values, iMLSparse.size)
+      val iSparseVector = V.sparse(sparseVectorLength, iVec.map(r => (r.getInt(0), r.getDouble(1)))).toSparse
+      val iBreezeSparseVector = new BSV[Double](iSparseVector.indices, iSparseVector.values, iSparseVector.size)
 
-      val jVecSeq = jVec.map(r => (r.getInt(0), r.getDouble(1)))
+      val jDenseVector = V.sparse(sparseVectorLength, jVec.map(r => (r.getInt(0), r.getDouble(1)))).toArray
+      val jBreezeDenseVector = new BDV[Double](jDenseVector)
 
-      val jbdv = new BDV[Double](V.sparse(sparseVectorLength, jVecSeq).toArray)
-
-      (jbdv.asDenseMatrix * ibsv).data(0)
+      //Retrieve product from matrix
+      (jBreezeDenseVector.asDenseMatrix * iBreezeSparseVector).data(0)
     })
 
-    val rightMatrixVectors = rightMatrix.vectorizeCols("j", "jVec")
+    val product = leftMatrix.vectorizeRows(i, iVec)
+      .crossJoin(rightMatrix.vectorizeCols(j, jVec))
+      .withColumn("product", dot(col(iVec), col(jVec)))
 
     new CoordinateMatrix(
-      leftMatrix.vectorizeRows("i", "iVec")
-        .crossJoin(rightMatrixVectors)
-        .withColumn("product", dot(col("iVec"), col("jVec")))
-        .map(row =>
-          MatrixEntry(
-            row.getAs[Long]("i"),
-            row.getAs[Long]("j"),
-            row.getAs[Double]("product"))))
-  }
-
-  private[distributed] def vectorizeRows(indexName: String, colName: String, itemCount: Int) = {
-    import entries.sparkSession.implicits._
-    entries
-      .groupByKey(_.i)
-      .mapGroups((a, b) => {
-        val vecSeq = b.map(matEntry => (matEntry.j.toInt, matEntry.value)).toSeq
-        (a, V.sparse(itemCount, vecSeq).compressed)
-      })
-      .withColumnRenamed("_1", indexName)
-      .withColumnRenamed("_2", colName)
-  }
-
-  private[distributed] def vectorizeCols(indexName: String, colName: String, itemCount: Int) = {
-    import entries.sparkSession.implicits._
-    entries
-      .groupByKey(_.j)
-      .mapGroups((a, b) => {
-        val vecSeq = b.map(matEntry => (matEntry.i.toInt, matEntry.value)).toSeq
-        (a, V.sparse(itemCount, vecSeq).compressed)
-      })
-      .withColumnRenamed("_1", indexName)
-      .withColumnRenamed("_2", colName)
+      product.map(row =>
+        MatrixEntry(
+          row.getAs[Long](i),
+          row.getAs[Long](j),
+          row.getAs[Double]("product"))))
   }
 
   private[distributed] def vectorizeRows(indexName: String, colName: String): DataFrame = {
@@ -253,7 +162,7 @@ class CoordinateMatrix(val entries: Dataset[MatrixEntry],
       .map(d => (d.i, (d.j.toInt, d.value)))
       .groupBy($"_1")
       .agg(collect_list($"_2"))
-      .withColumnRenamed("_1", "i")
+      .withColumnRenamed("_1", indexName)
       .withColumnRenamed("collect_list(_2)", colName)
   }
 
@@ -263,7 +172,7 @@ class CoordinateMatrix(val entries: Dataset[MatrixEntry],
       .map(d => (d.j, (d.i.toInt, d.value)))
       .groupBy($"_1")
       .agg(collect_list($"_2"))
-      .withColumnRenamed("_1", "j")
+      .withColumnRenamed("_1", indexName)
       .withColumnRenamed("collect_list(_2)", colName)
   }
 
@@ -273,6 +182,16 @@ class CoordinateMatrix(val entries: Dataset[MatrixEntry],
     * @return
     */
   private[distributed] override def toMLLib: CM = toMLLibCoordinateMatrix(entries)
+
+  private[ml] def toBreeze(): BDM[Double] = {
+    val m = numRows().toInt
+    val n = numCols().toInt
+    val mat = BDM.zeros[Double](m, n)
+    entries.collect().foreach { case MatrixEntry(i, j, value) =>
+      mat(i.toInt, j.toInt) = value
+    }
+    mat
+  }
 }
 
 private[distributed] trait MLLib {
