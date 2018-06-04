@@ -4,7 +4,7 @@ The current matrix multiplication implementation in Spark runs into scaling issu
 
 
 ## Benchmarks
-Benchmark results can be found in Benchmarks.xlsx, and the code to generate the benchmark results is included in Benchmarks.scala. The benchmarks where run on Azure Databricks and the cluster configurations can be found in each tab. For larger benchmarks, it is recommended to first generate and save the dataset, and to also write the dataset to disc. This is to avoid collecting the results onto the driver, while forcing Spark's lazy execution. Sample code for this is included in DataGeneration.scala.   
+Benchmark results can be found in Benchmarks.xlsx, and the code to generate the benchmark results is included in Benchmarks.scala. The benchmarks were run on Azure Databricks and the cluster configurations can be found in each tab. For larger benchmarks, it is recommended to first generate and save the dataset, and to also write the dataset to disc. This is to avoid collecting the results onto the driver, while forcing Spark's lazy execution. Sample code for this is included in DataGeneration.scala.   
 
 ## Setup
 
@@ -58,7 +58,7 @@ scala> timeSparseDRMMMul(1000,1000,1000,1,.02,1234L)
 
 ## Azure Databricks - Setup
 
-
+First, follow the above directions to use Maven to build a JAR from the project. Then, upload the jar as a new library in Databricks. Attach this library to your desired cluster. Next, upload Eenchmarks.scala. Run this notebook on your attached cluster. 
 
 ## Troubleshooting
 
